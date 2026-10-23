@@ -8,16 +8,8 @@ use Illuminate\Database\Eloquent\Model;
 class Book extends Model
 {
     use HasFactory;
-    public function loans()
-    {
-    return $this->hasMany(Loan::class);
-    }
 
+    protected $table = 'books';
 
-    protected $fillable = [
-        'kode_buku',
-        'judul',
-        'pengarang',
-        'stok',
-    ];
+    protected $fillable = ['kode_buku', 'judul', 'pengarang', 'penerbit', 'tahun', 'stok'];
 }

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\ProfileController;
 use Illuminate\Foundation\Application;
+use App\Http\Controllers\BookController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -24,4 +25,8 @@ Route::middleware('auth')->group(function () {
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
 
-require __DIR__.'/auth.php';
+Route::middleware(['auth'])->group(function () {
+    Route::resource('books', BookController::class);
+});
+
+require __DIR__ . '/auth.php';
