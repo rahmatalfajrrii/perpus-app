@@ -3,6 +3,7 @@
 use App\Http\Controllers\ProfileController;
 use Illuminate\Foundation\Application;
 use App\Http\Controllers\BookController;
+use App\Http\Controllers\MemberController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -27,6 +28,7 @@ Route::middleware('auth')->group(function () {
 
 Route::middleware(['auth'])->group(function () {
     Route::resource('books', BookController::class);
+    Route::resource('members', MemberController::class); // baris baru: 7 alamat CRUD untuk anggota
 });
 
 require __DIR__ . '/auth.php';
