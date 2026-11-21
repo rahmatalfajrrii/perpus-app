@@ -15,7 +15,8 @@ class MemberController extends Controller
         $members = Member::when($request->search, function ($query, $search) {
             $query->where(function ($q) use ($search) {
                 $q->where('nama', 'like', "%{$search}%")
-                    ->orWhere('nis_nim', 'like', "%{$search}%");
+                    ->orWhere('nis_nim', 'like', "%{$search}%")
+                    ->orWhere('no_hp', 'like', "%{$search}%");
             });
         })->latest()->paginate(10)->withQueryString();
 
@@ -38,8 +39,8 @@ class MemberController extends Controller
         $validated = $request->validate([
             'nama' => 'required|max:255',
             'nis_nim' => 'required|max:50|unique:members',
-            'no_hp' => 'nullable|max:20',
-            'foto' => 'nullable|image|mimes:jpg,jpeg,png|max:2048',
+            'no_hp' => 'nullable|digits_between:8,15',
+            'foto' => 'nullable|image|mimes:jpg,jpeg,png|max:1048',
         ]);
 
         // 2. Jika ada berkas foto yang diunggah, simpan ke storage/app/public/members
@@ -78,7 +79,7 @@ class MemberController extends Controller
         $validated = $request->validate([
             'nama' => 'required|max:255',
             'nis_nim' => 'required|max:50|unique:members,nis_nim,' . $member->id,
-            'no_hp' => 'nullable|max:20',
+            'no_hp' => 'nullable|digits_between:8,15',
             'foto' => 'nullable|image|mimes:jpg,jpeg,png|max:2048',
         ]);
 
