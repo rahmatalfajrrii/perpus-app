@@ -27,6 +27,49 @@ class MemberController extends Controller
     }
 
 
+    public function search(Request $request)
+    {
+        // Kata kunci dibaca dari parameter URL, misalnya /members/search?q=ani
+        $kataKunci = $request->query('q', '');
+
+        // Mencari nama ATAU nis_nim yang cocok, maksimal 10 baris
+        $members = Member::where(function ($query) use ($kataKunci) {
+            $query->where('nama', 'like', "%{$kataKunci}%")
+                ->orWhere('nis_nim', 'like', "%{$kataKunci}%");
+        })
+            ->latest()
+            ->limit(10)
+            ->get(['id', 'nama', 'nis_nim', 'no_hp', 'foto']);
+
+        // Mengirim data dalam format JSON
+        return response()->json($members);
+    }
+
+
+    public function cekNis(Request $request)
+    {
+        // NIS/NIM yang sedang diketik, misalnya /members/cek-nis?nis_nim=2023001
+        $nisNim = $request->query('nis_nim', '');
+
+        // ID anggota yang diabaikan (kosong pada form tambah)
+        $abaikanId = $request->query('abaikan');
+
+        // Periksa apakah ada anggota lain yang sudah memakai NIS/NIM ini
+        $sudahDipakai = Member::where('nis_nim', $nisNim)
+            ->when($abaikanId, function ($query, $id) {
+                // Jika ada ID yang diabaikan, jangan hitung anggota itu sendiri
+                $query->where('id', '!=', $id);
+            })
+            ->exists();
+
+        // Mengirim hasil pemeriksaan dalam format JSON
+        return response()->json([
+            'tersedia' => ! $sudahDipakai,
+        ]);
+    }
+
+
+
 
     public function create()
     {

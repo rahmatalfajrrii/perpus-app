@@ -1,36 +1,132 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Link, router } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import { ref, computed, watch, onBeforeUnmount } from 'vue';
+import axios from 'axios';
 
+// Menerima data dari MemberController@index
 const props = defineProps({
     members: Object,
     search: String,
 });
 
-// Nilai awal kotak pencarian diisi dari props.search
-// agar kata kunci tidak hilang saat halaman dimuat ulang
-const keyword = ref(props.search);
+// Isi kotak pencarian
+const keyword = ref(props.search ?? '');
 
-function cari() {
-    router.get('/members', { search: keyword.value });
-}
+// Hasil pencarian dari server
+const hasilCari = ref(null);
+const sedangMencari = ref(false);
+const pesanError = ref('');
 
-function hapus(id) {
-    if (confirm('Yakin ingin menghapus anggota ini?')) {
-        router.delete(route('members.destroy', id));
+// Timer debounce dan pembatal permintaan Axios
+let timer = null;
+let permintaan = null;
+
+// Data yang ditampilkan di tabel
+const daftarAnggota = computed(() =>
+    hasilCari.value ?? props.members.data
+);
+
+// Mengirim permintaan AJAX ke /members/search
+async function ambilHasil() {
+    // Batalkan permintaan sebelumnya
+    if (permintaan) {
+        permintaan.abort();
+    }
+
+    const controller = new AbortController();
+    permintaan = controller;
+
+    sedangMencari.value = true;
+    pesanError.value = '';
+
+    try {
+        const respons = await axios.get(route('members.search'), {
+            params: {
+                q: keyword.value.trim()
+            },
+            signal: controller.signal,
+        });
+
+        // Pastikan respons berasal dari permintaan terbaru
+        if (permintaan !== controller) {
+            return;
+        }
+
+        hasilCari.value = respons.data;
+        sedangMencari.value = false;
+
+    } catch (error) {
+        // Permintaan yang sengaja dibatalkan bukan kesalahan
+        if (
+            axios.isCancel(error) ||
+            error.code === 'ERR_CANCELED'
+        ) {
+            return;
+        }
+
+        if (permintaan === controller) {
+            sedangMencari.value = false;
+            pesanError.value =
+                'Pencarian gagal. Muat ulang halaman, lalu coba lagi.';
+        }
     }
 }
+
+// Pencarian otomatis setiap kali isi kotak berubah
+watch(keyword, (nilai) => {
+    clearTimeout(timer);
+
+    // Jika kotak pencarian dikosongkan
+    if (nilai.trim() === '') {
+        if (permintaan) {
+            permintaan.abort();
+            permintaan = null;
+        }
+
+        hasilCari.value = null;
+        sedangMencari.value = false;
+        pesanError.value = '';
+
+        return;
+    }
+
+    // Tunggu 300 milidetik sebelum mengirim permintaan
+    timer = setTimeout(ambilHasil, 300);
+});
+
+// Menghapus data anggota
+function hapus(id) {
+    if (confirm('Yakin ingin menghapus anggota ini?')) {
+        router.delete(route('members.destroy', id), {
+            onSuccess: () => {
+                if (keyword.value.trim() !== '') {
+                    ambilHasil();
+                }
+            },
+        });
+    }
+}
+
+// Membersihkan timer dan permintaan saat halaman ditinggalkan
+onBeforeUnmount(() => {
+    clearTimeout(timer);
+
+    if (permintaan) {
+        permintaan.abort();
+    }
+});
 </script>
 
 <template>
     <AuthenticatedLayout>
         <div class="p-4">
+
             <h1 class="text-xl font-bold">Data Anggota</h1>
 
-            <!-- Notifikasi sukses -->
+            <!-- Flash message -->
             <div
-                v-if="$page.props.flash.success"
+                v-if="$page.props.flash?.success"
                 class="my-2 text-green-700"
             >
                 {{ $page.props.flash.success }}
@@ -38,99 +134,124 @@ function hapus(id) {
 
             <!-- Tombol tambah dan pencarian -->
             <div class="my-3 flex items-center gap-3">
+
                 <Link href="/members/create">
                     + Tambah Anggota
                 </Link>
 
+                <!-- Pencarian otomatis melalui watch(keyword) -->
                 <input
                     v-model="keyword"
-                    @keyup.enter="cari"
                     type="text"
-                    placeholder="Cari nama/NIS/NIM/No.HP..."
+                    placeholder="Ketik nama atau NIS/NIM..."
                 >
 
-                <button
-                    @click="cari"
-                    type="button"
+                <!-- Penanda pencarian -->
+                <span
+                    v-if="sedangMencari"
+                    class="text-gray-500"
                 >
-                    Cari
-                </button>
+                    Mencari...
+                </span>
+
+            </div>
+
+            <!-- Pesan error -->
+            <div
+                v-if="pesanError"
+                class="my-2 text-red-600"
+            >
+                {{ pesanError }}
             </div>
 
             <!-- Tabel data anggota -->
-            <table class="w-full border-collapse border border-gray-300">
+            <table class="border-collapse">
+
                 <thead>
-                    <tr class="bg-gray-100">
-                        <th class="border border-gray-300 p-2">Foto</th>
-                        <th class="border border-gray-300 p-2">NIS/NIM</th>
-                        <th class="border border-gray-300 p-2">Nama</th>
-                        <th class="border border-gray-300 p-2">No. HP</th>
-                        <th class="border border-gray-300 p-2">Aksi</th>
+                    <tr>
+                        <th class="border px-3 py-2">Foto</th>
+                        <th class="border px-3 py-2">NIS/NIM</th>
+                        <th class="border px-3 py-2">Nama</th>
+                        <th class="border px-3 py-2">No. HP</th>
+                        <th class="border px-3 py-2">Aksi</th>
                     </tr>
                 </thead>
 
                 <tbody>
+
+                    <!-- Menampilkan hasil pencarian atau daftar bawaan -->
                     <tr
-                        v-for="member in members.data"
+                        v-for="member in daftarAnggota"
                         :key="member.id"
                     >
-                        <td class="border border-gray-300 p-2 text-center">
+                        <td class="border px-3 py-2">
+
+                            <!-- Foto anggota -->
                             <img
                                 v-if="member.foto"
-                                :src="'/storage/' + member.foto"
+                                :src="`/storage/${member.foto}`"
                                 alt="Foto anggota"
-                                class="w-12 h-12 object-cover rounded mx-auto"
+                                class="h-16 w-16 object-cover"
                             >
 
                             <span v-else>-</span>
+
                         </td>
 
-                        <td class="border border-gray-300 p-2">
+                        <td class="border px-3 py-2">
                             {{ member.nis_nim }}
                         </td>
 
-                        <td class="border border-gray-300 p-2">
+                        <td class="border px-3 py-2">
                             {{ member.nama }}
                         </td>
 
-                        <td class="border border-gray-300 p-2">
+                        <td class="border px-3 py-2">
                             {{ member.no_hp }}
                         </td>
 
-                        <td class="border border-gray-300 p-2">
+                        <td class="border px-3 py-2">
+
                             <Link
-                                :href="route('members.edit', member.id)"
-                                class="text-blue-600"
+                                :href="`/members/${member.id}/edit`"
+                                class="mr-3"
                             >
                                 Edit
                             </Link>
 
-                            <button
-                                @click="hapus(member.id)"
-                                type="button"
-                                class="ml-2 text-red-600"
-                            >
+                            <button @click="hapus(member.id)">
                                 Hapus
                             </button>
+
                         </td>
                     </tr>
 
-                    <tr v-if="members.data.length === 0">
+                    <!-- Jika tidak ada data -->
+                    <tr v-if="daftarAnggota.length === 0">
                         <td
                             colspan="5"
-                            class="border border-gray-300 p-3 text-center"
+                            class="border px-3 py-2"
                         >
-                            Belum ada data anggota.
+                            {{
+                                keyword.trim() !== ''
+                                    ? 'Tidak ada anggota yang ditemukan.'
+                                    : 'Belum ada data anggota.'
+                            }}
                         </td>
                     </tr>
+
                 </tbody>
+
             </table>
 
-            <!-- Tautan halaman (paginasi) bawaan hasil paginate(10) -->
-            <div class="mt-3 flex gap-3">
+            <!-- Pagination hanya untuk daftar bawaan -->
+            <div
+                v-if="hasilCari === null"
+                class="mt-3 flex gap-3"
+            >
                 <template
-                    v-for="link in members.links"
-                    :key="link.label"
+                    v-for="(link, index) in props.members.links"
+                    :key="index"
                 >
                     <Link
                         v-if="link.url"
@@ -145,6 +266,7 @@ function hapus(id) {
                     />
                 </template>
             </div>
+
         </div>
     </AuthenticatedLayout>
 </template>

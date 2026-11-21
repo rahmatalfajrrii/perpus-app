@@ -26,9 +26,31 @@ Route::middleware('auth')->group(function () {
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
 
+
+
+
 Route::middleware(['auth'])->group(function () {
+
+    // Route AJAX harus berada di atas Route::resource
+    Route::get('books/search', [BookController::class, 'search'])
+        ->name('books.search');
+
+    Route::get('books/cek-kode', [BookController::class, 'cekKode'])
+        ->name('books.cek-kode');
+
+    Route::get('members/search', [MemberController::class, 'search'])
+        ->name('members.search');
+
+    Route::get('members/cek-nis', [MemberController::class, 'cekNis'])
+        ->name('members.cek-nis');
+
     Route::resource('books', BookController::class);
-    Route::resource('members', MemberController::class); // baris baru: 7 alamat CRUD untuk anggota
+    Route::resource('members', MemberController::class);
 });
+
+
+
+
+
 
 require __DIR__ . '/auth.php';

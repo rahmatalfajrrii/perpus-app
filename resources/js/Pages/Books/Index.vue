@@ -1,218 +1,247 @@
-
 <script setup>
+// Mengambil layout dashboard yang sudah dibuat pada Pertemuan 5
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Link, router } from '@inertiajs/vue3';
-import { ref, watch } from 'vue';
+import { ref, computed, watch, onBeforeUnmount } from 'vue';
+import axios from 'axios';
 
+// Menerima data dari BookController@index
 const props = defineProps({
-    books: Object,
+    books: {
+        type: Object,
+        default: () => ({
+            data: [],
+            links: [],
+        }),
+    },
     search: {
         type: String,
         default: '',
     },
-    flash: {
-        type: Object,
-        default: () => ({
-            success: null,
-            error: null,
-        }),
-    },
 });
 
-// Menyimpan kata kunci pencarian
+// Isi kotak pencarian
 const keyword = ref(props.search ?? '');
 
-// Memperbarui kotak pencarian ketika props search berubah
-watch(
-    () => props.search,
-    (value) => {
-        keyword.value = value ?? '';
-    }
-);
+// Hasil pencarian dari server
+const hasilCari = ref(null);
+const sedangMencari = ref(false);
+const pesanError = ref('');
 
-// Fungsi pencarian buku
-function cari() {
-    router.get(
-        route('books.index'),
-        {
-            search: keyword.value,
-        },
-        {
-            preserveState: true,
-            replace: true,
+// Timer debounce dan pembatal permintaan Axios
+let timer = null;
+let permintaan = null;
+
+// Data yang ditampilkan di tabel
+// Jika data server belum tersedia, gunakan array kosong
+const daftarBuku = computed(() => {
+    return hasilCari.value ?? props.books?.data ?? [];
+});
+
+// Mengirim permintaan AJAX ke /books/search
+async function ambilHasil() {
+    // Batalkan permintaan sebelumnya
+    if (permintaan) {
+        permintaan.abort();
+    }
+
+    const controller = new AbortController();
+    permintaan = controller;
+
+    sedangMencari.value = true;
+    pesanError.value = '';
+
+    try {
+        const respons = await axios.get(route('books.search'), {
+            params: {
+                q: keyword.value.trim(),
+            },
+            signal: controller.signal,
+        });
+
+        // Pastikan respons berasal dari permintaan terbaru
+        if (permintaan !== controller) {
+            return;
         }
-    );
+
+        hasilCari.value = respons.data;
+        sedangMencari.value = false;
+
+    } catch (error) {
+        // Permintaan yang sengaja dibatalkan bukan kesalahan
+        if (
+            axios.isCancel(error) ||
+            error.code === 'ERR_CANCELED'
+        ) {
+            return;
+        }
+
+        if (permintaan === controller) {
+            sedangMencari.value = false;
+            pesanError.value =
+                'Pencarian gagal. Muat ulang halaman, lalu coba lagi.';
+        }
+    } finally {
+        if (permintaan === controller) {
+            permintaan = null;
+        }
+    }
 }
 
-// Fungsi menghapus buku
+// Pencarian otomatis setiap kali isi kotak berubah
+watch(keyword, (nilai) => {
+    clearTimeout(timer);
+
+    // Batalkan permintaan sebelumnya
+    if (permintaan) {
+        permintaan.abort();
+        permintaan = null;
+    }
+
+    // Jika kotak pencarian dikosongkan
+    if (nilai.trim() === '') {
+        hasilCari.value = null;
+        sedangMencari.value = false;
+        pesanError.value = '';
+
+        return;
+    }
+
+    // Tunggu 800 milidetik sebelum mengirim permintaan
+    timer = setTimeout(ambilHasil, 800);
+});
+
+// Menghapus data buku
 function hapus(id) {
     if (confirm('Yakin ingin menghapus buku ini?')) {
-        router.delete(route('books.destroy', id));
+        router.delete(route('books.destroy', id), {
+            onSuccess: () => {
+                if (keyword.value.trim() !== '') {
+                    ambilHasil();
+                }
+            },
+        });
     }
 }
+
+// Membersihkan timer dan permintaan saat halaman ditinggalkan
+onBeforeUnmount(() => {
+    clearTimeout(timer);
+
+    if (permintaan) {
+        permintaan.abort();
+        permintaan = null;
+    }
+});
 </script>
 
 <template>
     <AuthenticatedLayout>
-        <div class="p-6">
-            <h1 class="mb-4 text-xl font-semibold text-gray-800">
-                Data Buku
-            </h1>
+        <div class="container-fluid py-4">
 
-            <!-- Flash message sukses -->
-            <div
-                v-if="flash?.success"
-                class="mb-4 rounded-md border border-green-300 bg-green-100 px-4 py-3 text-green-800"
-            >
-                {{ flash.success }}
-            </div>
+            <h1>Data Buku</h1>
 
-            <!-- Flash message error -->
+            <!-- Flash message -->
             <div
-                v-if="flash?.error"
-                class="mb-4 rounded-md border border-red-300 bg-red-100 px-4 py-3 text-red-800"
+                v-if="$page.props.flash?.success"
+                class="alert alert-success"
+                style="color: red; margin-bottom: 10px;"
             >
-                {{ flash.error }}
+                {{ $page.props.flash.success }}
             </div>
 
             <!-- Tombol tambah buku -->
-            <div class="mb-4 flex justify-end">
-                <Link
-                    :href="route('books.create')"
-                    class="rounded-md bg-gray-800 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700"
-                >
-                    + Tambah Buku
-                </Link>
-            </div>
+            <Link href="/books/create">
+                + Tambah Buku
+            </Link>
 
-            <!-- Form pencarian -->
-            <form
-                @submit.prevent="cari"
-                class="mb-4 flex flex-wrap gap-2"
-            >
+            <!-- Kotak pencarian -->
+            <div class="my-3">
                 <input
                     v-model="keyword"
                     type="text"
-                    placeholder="Cari kode, judul, atau pengarang..."
-                    class="w-full max-w-md rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none"
-                />
-
-                <button
-                    type="submit"
-                    class="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
+                    placeholder="Ketik judul, pengarang, atau penerbit"
                 >
-                    Cari
-                </button>
 
-                <Link
-                    v-if="keyword"
-                    :href="route('books.index')"
-                    class="rounded-md bg-gray-200 px-4 py-2 text-gray-800 hover:bg-gray-300"
-                >
-                    Reset
-                </Link>
-            </form>
+                <span v-if="sedangMencari">
+                    Mencari...
+                </span>
+            </div>
+
+            <!-- Pesan error -->
+            <p v-if="pesanError">
+                {{ pesanError }}
+            </p>
 
             <!-- Tabel data buku -->
-            <div class="overflow-x-auto rounded-lg bg-white shadow">
-                <table
-                    class="min-w-full divide-y divide-gray-200 text-sm"
-                >
-                    <thead class="bg-gray-50 text-left text-gray-600">
-                        <tr>
-                            <th class="px-4 py-3">Kode</th>
-                            <th class="px-4 py-3">Judul</th>
-                            <th class="px-4 py-3">Pengarang</th>
-                            <th class="px-4 py-3">Tahun</th>
-                            <th class="px-4 py-3">Stok</th>
-                            <th class="px-4 py-3 text-center">Aksi</th>
-                        </tr>
-                    </thead>
+            <table class="table table-bordered table-striped">
+                <thead>
+                    <tr>
+                        <th>Kode Buku</th>
+                        <th>Judul</th>
+                        <th>Pengarang</th>
+                        <th>Stok</th>
+                        <th>Aksi</th>
+                    </tr>
+                </thead>
 
-                    <tbody class="divide-y divide-gray-100">
-                        <tr
-                            v-for="book in books.data"
-                            :key="book.id"
-                        >
-                            <td class="px-4 py-3">
-                                {{ book.kode_buku }}
-                            </td>
+                <tbody>
+                    <tr
+                        v-for="book in daftarBuku"
+                        :key="book.id"
+                    >
+                        <td>{{ book.kode_buku }}</td>
+                        <td>{{ book.judul }}</td>
+                        <td>{{ book.pengarang }}</td>
+                        <td>{{ book.stok }}</td>
 
-                            <td class="px-4 py-3">
-                                {{ book.judul }}
-                            </td>
-
-                            <td class="px-4 py-3">
-                                {{ book.pengarang }}
-                            </td>
-
-                            <td class="px-4 py-3">
-                                {{ book.tahun }}
-                            </td>
-
-                            <td class="px-4 py-3">
-                                {{ book.stok }}
-                            </td>
-
-                            <td class="px-4 py-3">
-                                <div class="flex justify-center gap-2">
-                                    <!-- Tombol edit -->
-                                    <Link
-                                        :href="route('books.edit', book.id)"
-                                        class="rounded-md bg-yellow-500 px-3 py-1.5 text-white hover:bg-yellow-600"
-                                    >
-                                        Edit
-                                    </Link>
-
-                                    <!-- Tombol hapus -->
-                                    <button
-                                        type="button"
-                                        @click="hapus(book.id)"
-                                        class="rounded-md bg-red-600 px-3 py-1.5 text-white hover:bg-red-700"
-                                    >
-                                        Hapus
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-
-                        <!-- Jika data kosong -->
-                        <tr v-if="books.data.length === 0">
-                            <td
-                                colspan="6"
-                                class="px-4 py-4 text-center text-gray-500"
+                        <td>
+                            <Link
+                                :href="route('books.edit', book.id)"
+                                class="btn btn-warning btn-sm"
                             >
-                                Data buku tidak ditemukan.
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+                                Edit
+                            </Link>
+
+                            <button
+                                type="button"
+                                class="btn btn-danger btn-sm"
+                                @click="hapus(book.id)"
+                            >
+                                Hapus
+                            </button>
+                        </td>
+                    </tr>
+
+                    <!-- Jika tidak ada data -->
+                    <tr v-if="daftarBuku.length === 0">
+                        <td colspan="5" class="text-center">
+                            Tidak ada buku yang ditemukan.
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <!-- Pagination hanya untuk daftar bawaan -->
+            <div
+                v-if="hasilCari === null && props.books?.links"
+                class="mt-3"
+            >
+                <Link
+                    v-for="(link, index) in props.books.links"
+                    :key="index"
+                    :href="link.url ?? '#'"
+                    v-html="link.label"
+                    class="btn btn-sm mx-1"
+                    :class="{
+                        'btn-primary': link.active,
+                        'btn-outline-secondary': !link.active,
+                        'disabled': !link.url
+                    }"
+                    :disabled="!link.url"
+                />
             </div>
 
-            <!-- Pagination -->
-            <div class="mt-4 flex flex-wrap gap-2 text-sm">
-                <template
-                    v-for="link in books.links"
-                    :key="link.label"
-                >
-                    <Link
-                        v-if="link.url"
-                        :href="link.url"
-                        v-html="link.label"
-                        class="rounded border bg-white px-3 py-1 hover:bg-gray-100"
-                        :class="{
-                            'bg-gray-800 text-white hover:bg-gray-800':
-                                link.active
-                        }"
-                    />
-
-                    <span
-                        v-else
-                        v-html="link.label"
-                        class="rounded border bg-gray-100 px-3 py-1 text-gray-400"
-                    />
-                </template>
-            </div>
         </div>
     </AuthenticatedLayout>
 </template>
