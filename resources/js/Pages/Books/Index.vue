@@ -135,113 +135,123 @@ onBeforeUnmount(() => {
 });
 </script>
 
+
 <template>
     <AuthenticatedLayout>
-        <div class="container-fluid py-4">
-
-            <h1>Data Buku</h1>
+        <!-- Seluruh isi dibungkus div p-4 -->
+        <div class="p-4">
+            <h1 class="text-xl font-bold">Data Buku</h1>
 
             <!-- Flash message -->
             <div
                 v-if="$page.props.flash?.success"
-                class="alert alert-success"
-                style="color: red; margin-bottom: 10px;"
+                class="my-2 text-green-700"
             >
                 {{ $page.props.flash.success }}
             </div>
 
-            <!-- Tombol tambah buku -->
-            <Link href="/books/create">
-                + Tambah Buku
-            </Link>
+            <div class="my-3 flex items-center gap-3">
+                <!-- Link menuju form tambah buku -->
+                <Link href="/books/create">+ Tambah Buku</Link>
 
-            <!-- Kotak pencarian -->
-            <div class="my-3">
+                <!-- Pencarian otomatis melalui watch(keyword) -->
                 <input
                     v-model="keyword"
                     type="text"
-                    placeholder="Ketik judul, pengarang, atau penerbit"
+                    placeholder="Ketik judul atau pengarang..."
                 >
 
-                <span v-if="sedangMencari">
+                <!-- Penanda AJAX sedang berjalan -->
+                <span v-if="sedangMencari" class="text-gray-500">
                     Mencari...
                 </span>
             </div>
 
-            <!-- Pesan error -->
-            <p v-if="pesanError">
+            <!-- Pesan jika permintaan AJAX gagal -->
+            <div v-if="pesanError" class="my-2 text-red-600">
                 {{ pesanError }}
-            </p>
+            </div>
 
-            <!-- Tabel data buku -->
-            <table class="table table-bordered table-striped">
+            <table class="border-collapse">
                 <thead>
                     <tr>
-                        <th>Kode Buku</th>
-                        <th>Judul</th>
-                        <th>Pengarang</th>
-                        <th>Stok</th>
-                        <th>Aksi</th>
+                        <th class="border px-3 py-2">Kode</th>
+                        <th class="border px-3 py-2">Judul</th>
+                        <th class="border px-3 py-2">Pengarang</th>
+                        <th class="border px-3 py-2">Stok</th>
+                        <th class="border px-3 py-2">Aksi</th>
                     </tr>
                 </thead>
 
                 <tbody>
+                    <!-- Menampilkan hasil pencarian atau daftar bawaan -->
                     <tr
                         v-for="book in daftarBuku"
                         :key="book.id"
                     >
-                        <td>{{ book.kode_buku }}</td>
-                        <td>{{ book.judul }}</td>
-                        <td>{{ book.pengarang }}</td>
-                        <td>{{ book.stok }}</td>
+                        <td class="border px-3 py-2">
+                            {{ book.kode_buku }}
+                        </td>
 
-                        <td>
+                        <td class="border px-3 py-2">
+                            {{ book.judul }}
+                        </td>
+
+                        <td class="border px-3 py-2">
+                            {{ book.pengarang }}
+                        </td>
+
+                        <td class="border px-3 py-2">
+                            {{ book.stok }}
+                        </td>
+
+                        <td class="border px-3 py-2">
+                            <!-- Link menuju form edit -->
                             <Link
-                                :href="route('books.edit', book.id)"
-                                class="btn btn-warning btn-sm"
+                                :href="`/books/${book.id}/edit`"
+                                class="mr-3"
                             >
                                 Edit
                             </Link>
 
-                            <button
-                                type="button"
-                                class="btn btn-danger btn-sm"
-                                @click="hapus(book.id)"
-                            >
+                            <!-- Tombol hapus buku -->
+                            <button @click="hapus(book.id)">
                                 Hapus
                             </button>
                         </td>
                     </tr>
 
-                    <!-- Jika tidak ada data -->
+                    <!-- Pesan jika tidak ada data -->
                     <tr v-if="daftarBuku.length === 0">
-                        <td colspan="5" class="text-center">
-                            Tidak ada buku yang ditemukan.
+                        <td colspan="5" class="border px-3 py-2">
+                            Tidak ada data yang ditemukan.
                         </td>
                     </tr>
                 </tbody>
             </table>
 
-            <!-- Pagination hanya untuk daftar bawaan -->
+            <!-- Paginasi hanya untuk daftar bawaan -->
             <div
-                v-if="hasilCari === null && props.books?.links"
-                class="mt-3"
+                v-if="hasilCari === null"
+                class="mt-3 flex gap-3"
             >
-                <Link
-                    v-for="(link, index) in props.books.links"
-                    :key="index"
-                    :href="link.url ?? '#'"
-                    v-html="link.label"
-                    class="btn btn-sm mx-1"
-                    :class="{
-                        'btn-primary': link.active,
-                        'btn-outline-secondary': !link.active,
-                        'disabled': !link.url
-                    }"
-                    :disabled="!link.url"
-                />
-            </div>
+                <template
+                    v-for="link in books.links"
+                    :key="link.label"
+                >
+                    <Link
+                        v-if="link.url"
+                        :href="link.url"
+                        v-html="link.label"
+                    />
 
+                    <span
+                        v-else
+                        v-html="link.label"
+                        class="text-gray-400"
+                    />
+                </template>
+            </div>
         </div>
     </AuthenticatedLayout>
 </template>

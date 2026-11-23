@@ -21,9 +21,10 @@ import { Link } from '@inertiajs/vue3';
             </Link>
 
             <!-- Menu menuju daftar anggota -->
-            <Link href="/members" class="block hover:text-gray-300">
-                Data Anggota
-            </Link>
+            <Link href="/members" class="block hover:text-gray-300">Data Anggota</Link>
+            <!-- Baris baru: menu menuju daftar peminjaman, href sama dengan
+Route::resource('loans', ...) -->
+            <Link href="/loans" class="block hover:text-gray-300">Peminjaman</Link>
         </nav>
     </aside>
 </template>

@@ -1,9 +1,9 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { useForm } from '@inertiajs/vue3';
-import { ref, watch, onBeforeUnmount } from 'vue';
-import axios from 'axios';
 
+// useForm membuat objek form yang otomatis mengelola nilai input
+// dan pesan error.
 const form = useForm({
     kode_buku: '',
     judul: '',
@@ -13,166 +13,85 @@ const form = useForm({
     stok: 0,
 });
 
-// ---------- Validasi realtime kode buku ----------
-
-// Status: '' (belum diperiksa), 'memeriksa',
-// 'tersedia', 'terpakai', atau 'gagal'
-const statusKode = ref('');
-
-// Timer debounce dan pengendali permintaan Axios
-let timerKode = null;
-let permintaanKode = null;
-
-// Memeriksa apakah kode buku sudah digunakan
-async function periksaKode() {
-    // Batalkan permintaan sebelumnya
-    if (permintaanKode) {
-        permintaanKode.abort();
-    }
-
-    const controller = new AbortController();
-    permintaanKode = controller;
-
-    statusKode.value = 'memeriksa';
-
-    try {
-        const respons = await axios.get(route('books.cek-kode'), {
-            params: {
-                kode_buku: form.kode_buku.trim(),
-            },
-            signal: controller.signal,
-        });
-
-        // Pastikan respons berasal dari permintaan terbaru
-        if (permintaanKode !== controller) {
-            return;
-        }
-
-        statusKode.value = respons.data.tersedia
-            ? 'tersedia'
-            : 'terpakai';
-
-    } catch (error) {
-        // Pembatalan permintaan bukan kesalahan
-        if (
-            controller.signal.aborted ||
-            axios.isCancel(error) ||
-            error.code === 'ERR_CANCELED'
-        ) {
-            return;
-        }
-
-        if (permintaanKode === controller) {
-            statusKode.value = 'gagal';
-        }
-    } finally {
-        if (permintaanKode === controller) {
-            permintaanKode = null;
-        }
-    }
-}
-
-// Memeriksa kode setiap kali pengguna mengetik
-watch(() => form.kode_buku, (nilai) => {
-    clearTimeout(timerKode);
-
-    // Batalkan permintaan sebelumnya
-    if (permintaanKode) {
-        permintaanKode.abort();
-        permintaanKode = null;
-    }
-
-    // Jika kolom kosong, hapus pesan pemeriksaan
-    if (!nilai || nilai.trim() === '') {
-        statusKode.value = '';
-        return;
-    }
-
-    // Tunggu 500 milidetik setelah ketikan terakhir
-    timerKode = setTimeout(periksaKode, 500);
-});
-
-// Membersihkan timer dan permintaan saat halaman ditinggalkan
-onBeforeUnmount(() => {
-    clearTimeout(timerKode);
-
-    if (permintaanKode) {
-        permintaanKode.abort();
-        permintaanKode = null;
-    }
-});
-
-// Menyimpan buku
+// Dipanggil ketika tombol submit diklik.
 function submit() {
+    // Mengirim data form ke route books.store.
     form.post(route('books.store'));
 }
 </script>
 
 <template>
     <AuthenticatedLayout>
-        <h1>Tambah Buku</h1>
+        <div class="p-4">
+            <h1 class="text-xl font-bold">Tambah Buku</h1>
 
-        <form @submit.prevent="submit">
-            <label>Kode Buku</label>
-            <input v-model="form.kode_buku" type="text">
+            <!--
+                @submit.prevent mencegah form reload halaman,
+                lalu menjalankan fungsi submit().
+                space-y-3 memberikan jarak antar kelompok isian.
+            -->
+            <form @submit.prevent="submit" class="mt-3 space-y-3">
 
-            <!-- Pesan hasil pemeriksaan realtime -->
-            <div
-                v-if="statusKode === 'memeriksa'"
-                class="text-gray-500"
-            >
-                Memeriksa kode buku...
-            </div>
+                <div>
+                    <label class="block">Kode Buku</label>
+                    <input v-model="form.kode_buku" type="text">
 
-            <div
-                v-else-if="statusKode === 'tersedia'"
-                class="text-green-700"
-            >
-                Kode buku ini tersedia.
-            </div>
+                    <!-- Menampilkan pesan error validasi Laravel -->
+                    <div v-if="form.errors.kode_buku" class="text-red-600">
+                        {{ form.errors.kode_buku }}
+                    </div>
+                </div>
 
-            <div
-                v-else-if="statusKode === 'terpakai'"
-                class="text-red-600"
-            >
-                Kode buku ini sudah terdaftar. Gunakan kode lain.
-            </div>
+                <div>
+                    <label class="block">Judul</label>
+                    <input v-model="form.judul" type="text">
 
-            <div
-                v-else-if="statusKode === 'gagal'"
-                class="text-yellow-700"
-            >
-                Pemeriksaan otomatis gagal. Anda tetap dapat menyimpan;
-                server akan memeriksa ulang.
-            </div>
+                    <div v-if="form.errors.judul" class="text-red-600">
+                        {{ form.errors.judul }}
+                    </div>
+                </div>
 
-            <span v-if="form.errors.kode_buku" class="text-red-600">
-                {{ form.errors.kode_buku }}
-            </span>
+                <div>
+                    <label class="block">Pengarang</label>
+                    <input v-model="form.pengarang" type="text">
 
-            <label>Judul</label>
-            <input v-model="form.judul" type="text">
-            <span v-if="form.errors.judul">{{ form.errors.judul }}</span>
+                    <div v-if="form.errors.pengarang" class="text-red-600">
+                        {{ form.errors.pengarang }}
+                    </div>
+                </div>
 
-            <label>Pengarang</label>
-            <input v-model="form.pengarang" type="text">
-            <span v-if="form.errors.pengarang">{{ form.errors.pengarang }}</span>
+                <div>
+                    <label class="block">Penerbit</label>
+                    <input v-model="form.penerbit" type="text">
 
-            <label>Penerbit</label>
-            <input v-model="form.penerbit" type="text">
-            <span v-if="form.errors.penerbit">{{ form.errors.penerbit }}</span>
+                    <div v-if="form.errors.penerbit" class="text-red-600">
+                        {{ form.errors.penerbit }}
+                    </div>
+                </div>
 
-            <label>Tahun</label>
-            <input v-model="form.tahun" type="text">
-            <span v-if="form.errors.tahun">{{ form.errors.tahun }}</span>
+                <div>
+                    <label class="block">Tahun</label>
+                    <input v-model="form.tahun" type="text">
 
-            <label>Stok</label>
-            <input v-model="form.stok" type="number">
-            <span v-if="form.errors.stok">{{ form.errors.stok }}</span>
+                    <div v-if="form.errors.tahun" class="text-red-600">
+                        {{ form.errors.tahun }}
+                    </div>
+                </div>
 
-            <button type="submit" :disabled="form.processing">
-                {{ form.processing ? 'Menyimpan...' : 'Simpan' }}
-            </button>
-        </form>
+                <div>
+                    <label class="block">Stok</label>
+                    <input v-model="form.stok" type="number">
+
+                    <div v-if="form.errors.stok" class="text-red-600">
+                        {{ form.errors.stok }}
+                    </div>
+                </div>
+
+                <button type="submit" :disabled="form.processing">
+                    Simpan
+                </button>
+
+            </form>
+        </div>
     </AuthenticatedLayout>
 </template>
